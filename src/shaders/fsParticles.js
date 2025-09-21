@@ -1,4 +1,4 @@
-const fsParticles = `
+const fsParticles = /* glsl */ `
 precision highp float;
 
 uniform vec3 cameraPosition;
@@ -35,7 +35,6 @@ void main() {
     // 最终输出
     vec3 finalColor = color * lighting + vec3(specular);
     gl_FragColor = vec4(finalColor, vColor.a);
-}
-`;
+}`;
 
 export default fsParticles;

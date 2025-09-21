@@ -1,4 +1,4 @@
-const vsParticles = `
+const vsParticles = /* glsl */ `
 precision highp float;
 
 attribute vec3 position;
@@ -87,7 +87,6 @@ void main() {
 	vColor = texture2D( diffuse, uv );
 	vLightPosition = lightPosition;
 
-}
-`;
+}`;
 
 export default vsParticles;
