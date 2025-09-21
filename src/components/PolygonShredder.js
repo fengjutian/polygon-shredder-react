@@ -85,9 +85,10 @@ class Simulation {
     this.targets = [this.rtTexturePos1, this.rtTexturePos2];
 
     // Simulation shader
-    this.simulationShader = new THREE.ShaderMaterial({
+    // Simulation shader
+    this.simulationShader = new THREE.RawShaderMaterial({
       uniforms: {
-        active: { value: 1 },
+        _active: { value: 1 },
         width: { value: this.width },
         height: { value: this.height },
         oPositions: { value: this.targets[1 - this.targetPos].texture },
@@ -101,7 +102,10 @@ class Simulation {
         factor: { value: 0.5 },
         evolution: { value: 0.5 },
         inverseModelViewMatrix: { value: new THREE.Matrix4() },
-        radius: { value: 2 }
+        radius: { value: 2 },
+        // RawShaderMaterial需要显式声明这些uniform
+        projectionMatrix: { value: new THREE.Matrix4() },
+        modelViewMatrix: { value: new THREE.Matrix4() }
       },
       vertexShader: textureVertexSimulationShader,
       fragmentShader: textureFragmentSimulationShader,
@@ -130,9 +134,13 @@ class Simulation {
   }
 
   // 只保留一个正确的render方法
+  // 在render方法中添加
   render(time, delta) {
     this.simulationShader.uniforms.timer.value = time;
     this.simulationShader.uniforms.delta.value = delta;
+    // 更新矩阵uniforms
+    this.simulationShader.uniforms.projectionMatrix.value.copy(this.rtCamera.projectionMatrix);
+    this.simulationShader.uniforms.modelViewMatrix.value.copy(this.rtCamera.matrixWorldInverse);
     
     // 从当前target读取数据
     this.simulationShader.uniforms.oPositions.value = this.targets[this.targetPos].texture;
@@ -312,13 +320,14 @@ const PolygonShredder = () => {
     scene.add(mesh);
 
     // 修复animate函数
+    // 修改animate函数中的变量引用（大约第320行）
     const animate = () => {
       requestAnimationFrame(animate);
       
       const delta = clock.getDelta() * 10;
       const time = clock.elapsedTime;
       
-      if (sim.simulationShader.uniforms.active.value) {
+      if (sim.simulationShader.uniforms._active.value) { // 将'active'改为'_active'
         sim.render(time, delta);
       }
       

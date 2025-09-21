@@ -4,7 +4,6 @@ precision highp float;
 attribute vec3 position;
 attribute vec2 uv;
 
-// 移除会被THREE.js自动添加的变量声明
 varying vec2 vUv;
 varying vec3 vOffset;
 
