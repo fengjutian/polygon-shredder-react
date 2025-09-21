@@ -7,45 +7,32 @@ import vsParticles from '../shaders/vsParticles';
 import fsParticles from '../shaders/fsParticles';
 // import fsParticlesShadow from '../shaders/fsParticlesShadow';
 
-// 添加到文件顶部
+// 实现简单的FBOHelper模拟类
+ class FBOHelper {
+  constructor(renderer) {
+    this.renderer = renderer;
+    this.visible = false;
+  }
+  
+  show(visible) {
+    this.visible = visible;
+  }
+  
+  attach(texture, label) {
+    // 模拟附加纹理的行为
+  }
+  
+  update() {
+    // 模拟更新行为
+  }
+}
+
+// Add at the top of the file
 const THREE_VERSION = parseFloat(THREE.REVISION);
 const IS_THREE_180_OR_NEWER = THREE_VERSION >= 180;
 
-// 模拟原项目中的 Detector 功能
-const Detector = {
-  webgl: (() => {
-    try {
-      return !!(window.WebGLRenderingContext && document.createElement('canvas').getContext('experimental-webgl'));
-    } catch (e) {
-      return false;
-    }
-  })()
-};
-
-// 模拟原项目中的 isMobile 功能
-const isMobile = {
-  any: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-};
-
-// 模拟 FBOHelper 类
-class FBOHelper {
-  constructor(renderer) { this.renderer = renderer; }
-  show() {}
-  setSize() {}
-  attach() {}
-  update() {}
-}
-
-// Simulation 类（已修改 Ping-Pong RenderTarget）
-// 修改Simulation类的构造函数
+// Update Simulation constructor with version-specific handling
 class Simulation {
-  updateTextureReferences() {
-    // 确保材质中的纹理引用始终指向当前活动的渲染目标
-    if (this.simulationShader.uniforms.tPositions) {
-      this.simulationShader.uniforms.tPositions.value = this.targets[this.targetPos].texture;
-    }
-  }
-
   constructor(renderer, width, height) {
     this.width = width;
     this.height = height;
@@ -74,7 +61,7 @@ class Simulation {
     this.texture.magFilter = THREE.NearestFilter;
     this.texture.needsUpdate = true;
 
-    // 关键修复：在WebGLRenderTarget选项中添加depthTexture和设置正确的targetTexture属性
+    // Version-specific render target options
     const renderTargetOptions = {
       wrapS: THREE.ClampToEdgeWrapping,
       wrapT: THREE.ClampToEdgeWrapping,
@@ -86,8 +73,13 @@ class Simulation {
       depthBuffer: false,
       generateMipmaps: false
     };
-
-    // 修复：使用兼容的方式创建WebGLRenderTarget
+    
+    // For Three.js 0.180.0+, add these properties
+    if (IS_THREE_180_OR_NEWER) {
+      renderTargetOptions.depthTexture = null;
+    }
+    
+    // Create render targets
     this.rtTexturePos1 = new THREE.WebGLRenderTarget(this.width, this.height, renderTargetOptions);
     this.rtTexturePos2 = new THREE.WebGLRenderTarget(this.width, this.height, renderTargetOptions);
 
@@ -99,8 +91,8 @@ class Simulation {
         active: { value: 1 },
         width: { value: this.width },
         height: { value: this.height },
-        oPositions: { value: this.texture },
-        tPositions: { value: this.texture },
+        oPositions: { value: this.targets[this.targetPos].texture },
+        tPositions: { value: this.targets[this.targetPos].texture },
         timer: { value: 0 },
         delta: { value: 0 },
         speed: { value: 0.5 },
@@ -133,9 +125,17 @@ class Simulation {
     this.renderer.setRenderTarget(null);
   }
 
+  // Add getter for currentTexture property
+  get currentTexture() {
+    return this.targets[this.targetPos].texture;
+  }
+
   render(time, delta) {
     this.simulationShader.uniforms.timer.value = time;
     this.simulationShader.uniforms.delta.value = delta;
+    
+    // CRITICAL FIX: Update texture reference BEFORE setting render target
+    this.simulationShader.uniforms.tPositions.value = this.targets[this.targetPos].texture;
 
     const nextTarget = 1 - this.targetPos;
     this.renderer.setRenderTarget(this.targets[nextTarget]);
@@ -145,14 +145,17 @@ class Simulation {
     this.targetPos = nextTarget;
   }
 
-  // 修复resize方法以正确处理不可变纹理
+  // Fix resize method to properly dispose resources
   resize(width, height) {
     this.width = width;
     this.height = height;
     
-    // 重新创建渲染目标而不是修改现有目标
+    // CRITICAL FIX: Dispose old render targets before creating new ones
+    if (this.rtTexturePos1) this.rtTexturePos1.dispose();
+    if (this.rtTexturePos2) this.rtTexturePos2.dispose();
+    
+    // Use proper render target options for Three.js 0.180.0+
     const floatType = THREE.FloatType;
-    // 完善WebGLRenderTarget选项
     const renderTargetOptions = {
       wrapS: THREE.ClampToEdgeWrapping,
       wrapT: THREE.ClampToEdgeWrapping,
@@ -163,14 +166,12 @@ class Simulation {
       stencilBuffer: false,
       depthBuffer: false,
       generateMipmaps: false,
-      // 显式设置depthTexture为null，避免任何深度纹理相关操作
-      depthTexture: null
+      depthTexture: null // Explicitly set to null
     };
     
-    // 创建渲染目标
+    // Create new render targets
     this.rtTexturePos1 = new THREE.WebGLRenderTarget(this.width, this.height, renderTargetOptions);
     this.rtTexturePos2 = new THREE.WebGLRenderTarget(this.width, this.height, renderTargetOptions);
-
     this.targets = [this.rtTexturePos1, this.rtTexturePos2];
     
     // 更新相机和几何体
@@ -187,10 +188,6 @@ class Simulation {
     this.renderer.render(this.rtScene, this.rtCamera);
     this.renderer.setRenderTarget(null);
   }
-
-  get currentTexture() {
-    return this.targets[this.targetPos].texture;
-  }
 }
 
 const PolygonShredder = () => {
@@ -198,13 +195,13 @@ const PolygonShredder = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!Detector.webgl) {
+    if (!window.WebGLRenderingContext) {
       alert('Your browser does not support WebGL');
       setIsLoading(false);
       return;
     }
 
-    const size = isMobile.any ? 32 : 256;
+    const size = window.innerWidth <= 768 ? 32 : 256;
     const container = containerRef.current;
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -286,15 +283,16 @@ const PolygonShredder = () => {
     
       if (sim.simulationShader.uniforms.active.value) {
         sim.render(time, delta);
-        // 每次渲染后确保纹理引用正确
-        sim.updateTextureReferences();
+        // Already handled in the render method
+        // sim.updateTextureReferences();
       }
     
+      // CRITICAL FIX: Only update uniforms that need changing
+      // Avoid directly accessing targets array
       material.uniforms.map.value = sim.currentTexture;
       material.uniforms.prevMap.value = sim.targets[1 - sim.targetPos].texture;
       material.uniforms.timer.value = time;
     
-      // 添加这一行来更新控制器
       controls.update();
     
       renderer.setClearColor(0x202020);
