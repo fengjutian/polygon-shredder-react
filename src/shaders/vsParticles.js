@@ -87,6 +87,7 @@ void main() {
 	vColor = texture2D( diffuse, uv );
 	vLightPosition = lightPosition;
 
-}`;
+}
+`;
 
 export default vsParticles;

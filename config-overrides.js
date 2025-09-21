@@ -1,21 +1,19 @@
-const { overrideDevServer } = require('customize-cra');
+const { override, overrideDevServer } = require('customize-cra');
 
 module.exports = {
+  webpack: override(
+    // 这里可以添加webpack配置
+  ),
   devServer: overrideDevServer(
     (config) => {
-      // 使用新的setupMiddlewares选项代替已弃用的选项
+      // 设置开发服务器配置
       config.setupMiddlewares = (middlewares, devServer) => {
         if (!devServer) {
           throw new Error('webpack-dev-server is not defined');
         }
-
-        // 在这里添加您的中间件
-        // 例如：devServer.app.use('/api', myApiMiddleware);
-
-        // 必须返回中间件数组
+        // 这里可以添加自定义中间件
         return middlewares;
       };
-      
       return config;
     }
   )

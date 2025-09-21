@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import textureVertexSimulationShader from '../shaders/textureVertexSimulationShader';
 import textureFragmentSimulationShader from '../shaders/textureFragmentSimulationShader';
 import vsParticles from '../shaders/vsParticles';
