@@ -256,8 +256,6 @@ const PolygonShredder = () => {
     const material = new THREE.RawShaderMaterial({
       uniforms: {
         map: { value: sim.currentTexture },
-        // 使用currentTexture的引用而不是直接访问targets数组
-        prevMap: { value: sim.targets[1 - sim.targetPos].texture },
         width: { value: sim.width },
         height: { value: sim.height },
         timer: { value: 0 },
@@ -288,8 +286,9 @@ const PolygonShredder = () => {
       }
     
       // CRITICAL FIX: Only update uniforms that need changing
-      // Avoid directly accessing targets array
+      // Avoid directly accessing targets array to prevent feedback loops
       material.uniforms.map.value = sim.currentTexture;
+      material.uniforms.timer.value = time;
       material.uniforms.prevMap.value = sim.targets[1 - sim.targetPos].texture;
       material.uniforms.timer.value = time;
     
