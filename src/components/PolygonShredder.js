@@ -5,7 +5,6 @@ import textureVertexSimulationShader from '../shaders/textureVertexSimulationSha
 import textureFragmentSimulationShader from '../shaders/textureFragmentSimulationShader';
 import vsParticles from '../shaders/vsParticles';
 import fsParticles from '../shaders/fsParticles';
-// import fsParticlesShadow from '../shaders/fsParticlesShadow';
 
 // 实现简单的FBOHelper模拟类
 class FBOHelper {
@@ -240,6 +239,35 @@ const PolygonShredder = () => {
       p++;
     }
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    
+    // 添加boxVertices和boxNormals数据
+    const boxVertices = [
+      // Front face
+      -1, -1,  1,  1, -1,  1,  1,  1,  1,
+      1,  1,  1, -1,  1,  1, -1, -1,  1,
+      // Back face
+      -1, -1, -1, -1,  1, -1,  1,  1, -1,
+      1,  1, -1,  1, -1, -1, -1, -1, -1,
+      // Top face
+      -1,  1, -1, -1,  1,  1,  1,  1,  1,
+      1,  1,  1,  1,  1, -1, -1,  1, -1,
+      // Bottom face
+      -1, -1, -1,  1, -1, -1,  1, -1,  1,
+      1, -1,  1, -1, -1,  1, -1, -1, -1,
+      // Right face
+      1, -1, -1,  1,  1, -1,  1,  1,  1,
+      1,  1,  1,  1, -1,  1,  1, -1, -1,
+      // Left face
+      -1, -1, -1, -1, -1,  1, -1,  1,  1,
+      -1,  1,  1, -1,  1, -1, -1, -1, -1
+    ];
+    
+    const boxNormals = [
+      0, 0, 1,  // Front face
+      0, 0, -1, // Back face
+      0, 1, 0   // Top face
+    ];
+
     const colors = [
       0xed6a5a,0xf4f1bb,0x9bc1bc,0x5ca4a9,0xe6ebe0,0xf0b67f,0xfe5f55,0xd6d1b1,
       0xc7efcf,0xeef5db,0x50514f,0xf25f5c,0xffe066,0x247ba0,0x70c1b3
@@ -258,7 +286,7 @@ const PolygonShredder = () => {
     diffuseTexture.magFilter = THREE.NearestFilter;
     diffuseTexture.needsUpdate = true;
 
-    // 简化的粒子材质，移除不必要的阴影相关uniform
+    // 修复粒子材质，添加所有必要的uniform
     const material = new THREE.RawShaderMaterial({
       uniforms: {
         map: { value: sim.currentTexture },
@@ -270,7 +298,9 @@ const PolygonShredder = () => {
         meshScale: { value: 1 },
         cameraPosition: { value: camera.position },
         lightPosition: { value: new THREE.Vector3(10, 10, 10) },
-        diffuse: { value: diffuseTexture }
+        diffuse: { value: diffuseTexture },
+        boxVertices: { value: boxVertices },
+        boxNormals: { value: boxNormals }
       },
       vertexShader: vsParticles,
       fragmentShader: fsParticles,
