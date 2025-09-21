@@ -284,23 +284,27 @@ const PolygonShredder = () => {
     scene.add(mesh);
 
     const t = new THREE.Clock();
+    // 在animate函数中添加controls.update()调用
     const animate = () => {
       requestAnimationFrame(animate);
-
+    
       const delta = t.getDelta() * 10;
       const time = t.elapsedTime;
-
+    
       if (sim.simulationShader.uniforms.active.value) {
         sim.render(time, delta);
       }
-
+    
       material.uniforms.map.value = sim.currentTexture;
       material.uniforms.prevMap.value = sim.targets[1 - sim.targetPos].texture;
       material.uniforms.timer.value = time;
-
+    
+      // 添加这一行来更新控制器
+      controls.update();
+    
       renderer.setClearColor(0x202020);
       renderer.render(scene, camera);
-
+    
       helper.update();
     };
 
