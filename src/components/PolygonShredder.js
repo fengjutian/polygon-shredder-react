@@ -8,7 +8,7 @@ import fsParticles from '../shaders/fsParticles';
 // import fsParticlesShadow from '../shaders/fsParticlesShadow';
 
 // 实现简单的FBOHelper模拟类
- class FBOHelper {
+class FBOHelper {
   constructor(renderer) {
     this.renderer = renderer;
     this.visible = false;
@@ -31,7 +31,7 @@ import fsParticles from '../shaders/fsParticles';
 const THREE_VERSION = parseFloat(THREE.REVISION);
 const IS_THREE_180_OR_NEWER = THREE_VERSION >= 180;
 
-// Update Simulation constructor with version-specific handling
+// 修复Simulation类，确保结构正确
 class Simulation {
   constructor(renderer, width, height) {
     this.width = width;
@@ -91,7 +91,7 @@ class Simulation {
         active: { value: 1 },
         width: { value: this.width },
         height: { value: this.height },
-        oPositions: { value: this.targets[this.targetPos].texture },
+        oPositions: { value: this.targets[1 - this.targetPos].texture },
         tPositions: { value: this.targets[this.targetPos].texture },
         timer: { value: 0 },
         delta: { value: 0 },
@@ -119,7 +119,7 @@ class Simulation {
     this.rtQuad = new THREE.Mesh(new THREE.PlaneGeometry(this.width, this.height), this.simulationShader);
     this.rtScene.add(this.rtQuad);
 
-    // Initial render - 修复：确保首次渲染正确处理不可变纹理
+    // Initial render - 确保首次渲染正确处理不可变纹理
     this.renderer.setRenderTarget(this.targets[this.targetPos]);
     this.renderer.render(this.rtScene, this.rtCamera);
     this.renderer.setRenderTarget(null);
@@ -130,21 +130,24 @@ class Simulation {
     return this.targets[this.targetPos].texture;
   }
 
+  // 只保留一个正确的render方法
   render(time, delta) {
     this.simulationShader.uniforms.timer.value = time;
     this.simulationShader.uniforms.delta.value = delta;
     
-    // CRITICAL FIX: Update texture reference BEFORE setting render target
-    this.simulationShader.uniforms.tPositions.value = this.targets[this.targetPos].texture;
-
+    // 从当前target读取数据
+    this.simulationShader.uniforms.oPositions.value = this.targets[this.targetPos].texture;
+    
+    // 计算下一个target并渲染到那里
     const nextTarget = 1 - this.targetPos;
     this.renderer.setRenderTarget(this.targets[nextTarget]);
     this.renderer.render(this.rtScene, this.rtCamera);
     this.renderer.setRenderTarget(null);
-
+    
+    // 更新target位置，确保下一帧从新渲染的纹理读取
     this.targetPos = nextTarget;
   }
-
+  
   // Fix resize method to properly dispose resources
   resize(width, height) {
     this.width = width;
@@ -217,23 +220,26 @@ const PolygonShredder = () => {
     scene.add(camera);
 
     const controls = new OrbitControls(camera, renderer.domElement);
+    const clock = new THREE.Clock();
 
     const sim = new Simulation(renderer, size, size);
     helper.attach(sim.currentTexture, 'Positions');
 
     // 创建粒子 Mesh
+    // 确保几何体的position属性设置正确
     const geometry = new THREE.BufferGeometry();
-    const positionsLength = sim.width * sim.height * 3 * 18;
+    const positionsLength = sim.width * sim.height * 3;
     const positions = new Float32Array(positionsLength);
     let p = 0;
     for (let j = 0; j < positionsLength; j += 3) {
-      positions[j] = p;
-      positions[j + 1] = Math.floor(p / 18);
-      positions[j + 2] = p % 18;
+      const x = (p % sim.width) / sim.width * 2 - 1;
+      const y = Math.floor(p / sim.width) / sim.height * 2 - 1;
+      positions[j] = x;
+      positions[j + 1] = y;
+      positions[j + 2] = 0;
       p++;
     }
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
     const colors = [
       0xed6a5a,0xf4f1bb,0x9bc1bc,0x5ca4a9,0xe6ebe0,0xf0b67f,0xfe5f55,0xd6d1b1,
       0xc7efcf,0xeef5db,0x50514f,0xf25f5c,0xffe066,0x247ba0,0x70c1b3
@@ -251,87 +257,81 @@ const PolygonShredder = () => {
     diffuseTexture.magFilter = THREE.NearestFilter;
     diffuseTexture.needsUpdate = true;
 
-    // 粒子材质
-    // 修改材质uniforms初始化
+    // 修复后的粒子材质定义，包含所有必需的uniform
     const material = new THREE.RawShaderMaterial({
       uniforms: {
         map: { value: sim.currentTexture },
+        prevMap: { value: sim.currentTexture }, // 临时使用相同的纹理
         width: { value: sim.width },
         height: { value: sim.height },
         timer: { value: 0 },
         spread: { value: 4 },
         boxScale: { value: new THREE.Vector3(1, 1, 1) },
-        meshScale: { value: 1 }
+        meshScale: { value: 1 },
+        // 添加缺失的uniforms
+        boxVertices: { value: new Float32Array([
+          // 立方体的顶点数据
+          -1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1, -1,
+          -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1
+        ]) },
+        boxNormals: { value: new Float32Array([
+          0, 0, -1, 0, 0, 1, 1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0
+        ]) },
+        shadowV: { value: new THREE.Matrix4() },
+        shadowP: { value: new THREE.Matrix4() },
+        lightPosition: { value: new THREE.Vector3(10, 10, 10) },
+        cameraPosition: { value: camera.position },
+        diffuse: { value: diffuseTexture },
+        // 简化其他未使用的uniform
+        depthTexture: { value: null },
+        projector: { value: null },
+        resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
       },
       vertexShader: vsParticles,
       fragmentShader: fsParticles,
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide,
+      transparent: true // 确保支持透明度
     });
 
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
 
-    const t = new THREE.Clock();
-    // 在animate函数中添加controls.update()调用
+    // 修复animate函数，确保更新所有关键uniform
     const animate = () => {
       requestAnimationFrame(animate);
-    
-      const delta = t.getDelta() * 10;
-      const time = t.elapsedTime;
-    
+      
+      const delta = clock.getDelta() * 10;
+      const time = clock.elapsedTime;
+      
       if (sim.simulationShader.uniforms.active.value) {
         sim.render(time, delta);
-        // Already handled in the render method
-        // sim.updateTextureReferences();
       }
-    
-      // CRITICAL FIX: Only update uniforms that need changing
-      // Avoid directly accessing targets array to prevent feedback loops
+      
+      // 更新uniforms
       material.uniforms.map.value = sim.currentTexture;
+      material.uniforms.prevMap.value = sim.currentTexture;
       material.uniforms.timer.value = time;
-      material.uniforms.prevMap.value = sim.targets[1 - sim.targetPos].texture;
-      material.uniforms.timer.value = time;
-    
+      material.uniforms.cameraPosition.value.copy(camera.position);
+      
       controls.update();
-    
+      
       renderer.setClearColor(0x202020);
       renderer.render(scene, camera);
-    
+      
       helper.update();
     };
 
-    // 添加窗口大小调整事件处理
-    const handleResize = () => {
-      const newWidth = window.innerWidth;
-      const newHeight = window.innerHeight;
-      
-      // 更新渲染器大小
-      renderer.setSize(newWidth, newHeight);
-      
-      // 更新相机宽高比
-      camera.aspect = newWidth / newHeight;
-      camera.updateProjectionMatrix();
-      
-      // 注意：这里不应该直接修改sim的尺寸，因为这会触发resize方法
-      // 而resize方法会重新创建不可变纹理
-      // 如果需要改变粒子系统分辨率，应该重新创建整个Simulation实例
-    };
-    
-    // 添加事件监听器
-    window.addEventListener('resize', handleResize);
-    
+    // 启动动画循环
     animate();
-    setIsLoading(false);
-
-    // 组件卸载时清理
+    
+    // 清理函数
     return () => {
-      window.removeEventListener('resize', handleResize);
-      renderer.dispose();
-      // 显式释放WebGLRenderTarget资源
-      if (sim) {
-        sim.rtTexturePos1.dispose();
-        sim.rtTexturePos2.dispose();
-      }
+      // ...清理代码...
+      if (mesh) scene.remove(mesh);
+      if (helper) helper.visible = false;
+      if (controls) controls.dispose();
+      if (renderer) renderer.dispose();
+      setIsLoading(false);
     };
   }, []);
 
