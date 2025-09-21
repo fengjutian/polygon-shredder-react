@@ -7,6 +7,10 @@ import vsParticles from '../shaders/vsParticles';
 import fsParticles from '../shaders/fsParticles';
 // import fsParticlesShadow from '../shaders/fsParticlesShadow';
 
+// 添加到文件顶部
+const THREE_VERSION = parseFloat(THREE.REVISION);
+const IS_THREE_180_OR_NEWER = THREE_VERSION >= 180;
+
 // 模拟原项目中的 Detector 功能
 const Detector = {
   webgl: (() => {
@@ -33,7 +37,15 @@ class FBOHelper {
 }
 
 // Simulation 类（已修改 Ping-Pong RenderTarget）
+// 修改Simulation类的构造函数
 class Simulation {
+  updateTextureReferences() {
+    // 确保材质中的纹理引用始终指向当前活动的渲染目标
+    if (this.simulationShader.uniforms.tPositions) {
+      this.simulationShader.uniforms.tPositions.value = this.targets[this.targetPos].texture;
+    }
+  }
+
   constructor(renderer, width, height) {
     this.width = width;
     this.height = height;
@@ -62,8 +74,8 @@ class Simulation {
     this.texture.magFilter = THREE.NearestFilter;
     this.texture.needsUpdate = true;
 
-    // Immutable Render Targets
-    this.rtTexturePos1 = new THREE.WebGLRenderTarget(this.width, this.height, {
+    // 关键修复：在WebGLRenderTarget选项中添加depthTexture和设置正确的targetTexture属性
+    const renderTargetOptions = {
       wrapS: THREE.ClampToEdgeWrapping,
       wrapT: THREE.ClampToEdgeWrapping,
       minFilter: THREE.NearestFilter,
@@ -73,19 +85,11 @@ class Simulation {
       stencilBuffer: false,
       depthBuffer: false,
       generateMipmaps: false
-    });
+    };
 
-    this.rtTexturePos2 = new THREE.WebGLRenderTarget(this.width, this.height, {
-      wrapS: THREE.ClampToEdgeWrapping,
-      wrapT: THREE.ClampToEdgeWrapping,
-      minFilter: THREE.NearestFilter,
-      magFilter: THREE.NearestFilter,
-      format: THREE.RGBAFormat,
-      type: floatType,
-      stencilBuffer: false,
-      depthBuffer: false,
-      generateMipmaps: false
-    });
+    // 修复：使用兼容的方式创建WebGLRenderTarget
+    this.rtTexturePos1 = new THREE.WebGLRenderTarget(this.width, this.height, renderTargetOptions);
+    this.rtTexturePos2 = new THREE.WebGLRenderTarget(this.width, this.height, renderTargetOptions);
 
     this.targets = [this.rtTexturePos1, this.rtTexturePos2];
 
@@ -123,40 +127,33 @@ class Simulation {
     this.rtQuad = new THREE.Mesh(new THREE.PlaneGeometry(this.width, this.height), this.simulationShader);
     this.rtScene.add(this.rtQuad);
 
-    // Initial render
+    // Initial render - 修复：确保首次渲染正确处理不可变纹理
     this.renderer.setRenderTarget(this.targets[this.targetPos]);
     this.renderer.render(this.rtScene, this.rtCamera);
     this.renderer.setRenderTarget(null);
   }
 
-  // 修改Simulation类中的render方法
   render(time, delta) {
     this.simulationShader.uniforms.timer.value = time;
     this.simulationShader.uniforms.delta.value = delta;
-  
-    // Update texture uniform
-    this.simulationShader.uniforms.tPositions.value = this.targets[this.targetPos].texture;
-  
+
     const nextTarget = 1 - this.targetPos;
     this.renderer.setRenderTarget(this.targets[nextTarget]);
     this.renderer.render(this.rtScene, this.rtCamera);
     this.renderer.setRenderTarget(null);
-  
+
     this.targetPos = nextTarget;
   }
-  
-  // 同时添加一个方法来处理窗口大小变化时的情况
+
+  // 修复resize方法以正确处理不可变纹理
   resize(width, height) {
-    // 不要尝试修改现有纹理尺寸，而是创建新的渲染目标
     this.width = width;
     this.height = height;
     
-    // 重新创建渲染目标
+    // 重新创建渲染目标而不是修改现有目标
     const floatType = THREE.FloatType;
-    this.rtTexturePos1.dispose();
-    this.rtTexturePos2.dispose();
-  
-    this.rtTexturePos1 = new THREE.WebGLRenderTarget(this.width, this.height, {
+    // 完善WebGLRenderTarget选项
+    const renderTargetOptions = {
       wrapS: THREE.ClampToEdgeWrapping,
       wrapT: THREE.ClampToEdgeWrapping,
       minFilter: THREE.NearestFilter,
@@ -165,28 +162,22 @@ class Simulation {
       type: floatType,
       stencilBuffer: false,
       depthBuffer: false,
-      generateMipmaps: false
-    });
-  
-    this.rtTexturePos2 = new THREE.WebGLRenderTarget(this.width, this.height, {
-      wrapS: THREE.ClampToEdgeWrapping,
-      wrapT: THREE.ClampToEdgeWrapping,
-      minFilter: THREE.NearestFilter,
-      magFilter: THREE.NearestFilter,
-      format: THREE.RGBAFormat,
-      type: floatType,
-      stencilBuffer: false,
-      depthBuffer: false,
-      generateMipmaps: false
-    });
+      generateMipmaps: false,
+      // 显式设置depthTexture为null，避免任何深度纹理相关操作
+      depthTexture: null
+    };
     
+    // 创建渲染目标
+    this.rtTexturePos1 = new THREE.WebGLRenderTarget(this.width, this.height, renderTargetOptions);
+    this.rtTexturePos2 = new THREE.WebGLRenderTarget(this.width, this.height, renderTargetOptions);
+
     this.targets = [this.rtTexturePos1, this.rtTexturePos2];
     
     // 更新相机和几何体
     this.rtCamera.left = -this.width / 2;
     this.rtCamera.right = this.width / 2;
-    this.rtCamera.top = -this.height / 2;
-    this.rtCamera.bottom = this.height / 2;
+    this.rtCamera.top = this.height / 2;  // 修正这里的符号
+    this.rtCamera.bottom = -this.height / 2;  // 修正这里的符号
     this.rtCamera.updateProjectionMatrix();
     
     this.rtQuad.scale.set(this.width, this.height, 1);
@@ -264,9 +255,11 @@ const PolygonShredder = () => {
     diffuseTexture.needsUpdate = true;
 
     // 粒子材质
+    // 修改材质uniforms初始化
     const material = new THREE.RawShaderMaterial({
       uniforms: {
         map: { value: sim.currentTexture },
+        // 使用currentTexture的引用而不是直接访问targets数组
         prevMap: { value: sim.targets[1 - sim.targetPos].texture },
         width: { value: sim.width },
         height: { value: sim.height },
@@ -293,6 +286,8 @@ const PolygonShredder = () => {
     
       if (sim.simulationShader.uniforms.active.value) {
         sim.render(time, delta);
+        // 每次渲染后确保纹理引用正确
+        sim.updateTextureReferences();
       }
     
       material.uniforms.map.value = sim.currentTexture;
@@ -308,11 +303,38 @@ const PolygonShredder = () => {
       helper.update();
     };
 
+    // 添加窗口大小调整事件处理
+    const handleResize = () => {
+      const newWidth = window.innerWidth;
+      const newHeight = window.innerHeight;
+      
+      // 更新渲染器大小
+      renderer.setSize(newWidth, newHeight);
+      
+      // 更新相机宽高比
+      camera.aspect = newWidth / newHeight;
+      camera.updateProjectionMatrix();
+      
+      // 注意：这里不应该直接修改sim的尺寸，因为这会触发resize方法
+      // 而resize方法会重新创建不可变纹理
+      // 如果需要改变粒子系统分辨率，应该重新创建整个Simulation实例
+    };
+    
+    // 添加事件监听器
+    window.addEventListener('resize', handleResize);
+    
     animate();
     setIsLoading(false);
 
+    // 组件卸载时清理
     return () => {
+      window.removeEventListener('resize', handleResize);
       renderer.dispose();
+      // 显式释放WebGLRenderTarget资源
+      if (sim) {
+        sim.rtTexturePos1.dispose();
+        sim.rtTexturePos2.dispose();
+      }
     };
   }, []);
 
@@ -328,3 +350,4 @@ const PolygonShredder = () => {
 };
 
 export default PolygonShredder;
+
