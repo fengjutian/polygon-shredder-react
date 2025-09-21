@@ -5,9 +5,7 @@ attribute vec3 position;
 
 uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
-uniform mat3 normalMatrix;
 uniform mat4 modelMatrix;
-uniform mat4 viewMatrix;
 
 uniform vec3 cameraPosition;
 
@@ -27,21 +25,11 @@ uniform float meshScale;
 varying vec3 vPosition;
 varying vec4 vColor;
 
-varying vec4 vShadowCoord;
-uniform mat4 shadowV;
-uniform mat4 shadowP;
 uniform vec3 lightPosition;
 
 varying vec3 vLightPosition;
 
 uniform sampler2D diffuse;
-
-const mat4 biasMatrix = mat4(
-	0.5, 0.0, 0.0, 0.0,
-	0.0, 0.5, 0.0, 0.0,
-	0.0, 0.0, 0.5, 0.0,
-	0.5, 0.5, 0.5, 1.0
-);
 
 mat4 rotationMatrix(vec3 axis, float angle) {
 
@@ -56,18 +44,8 @@ mat4 rotationMatrix(vec3 axis, float angle) {
 			0.0,                                0.0,                                0.0,                                1.0);
 }
 
-float ramp( float x ) {
-	return 1. - 1. - pow( 1. - x, 4. );
-}
-
 float parabola( float x, float k ) {
 	return pow( 4. * x * ( 1. - x ), k );
-}
-
-float random(vec4 seed4){
-	//return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
-	float dot_product = dot(seed4, vec4(12.9898,78.233,45.164,94.673));
-	return fract(sin(dot_product) * 43758.5453);
 }
 
 mat3 calcLookAtMatrix(vec3 origin, vec3 target, float roll) {
@@ -83,8 +61,8 @@ void main() {
 
 	vec2 dimensions = vec2( width, height );
 
-	float px = position.y;
-	float vi = position.z;
+	float px = position.x;
+	float vi = position.y;
 	float x = mod( px, dimensions.x );
 	float y = mod( floor( px / dimensions.x ), dimensions.y );
 	vec2 uv = vec2( x, y ) / dimensions;
@@ -105,9 +83,6 @@ void main() {
 
 	gl_Position = projectionMatrix * modelViewMatrix * vec4( modifiedPosition, 1.0 );
 	vPosition = modifiedPosition;
-
-	// 修复阴影坐标计算的矩阵乘法顺序
-	vShadowCoord = biasMatrix * shadowP * shadowV * modelMatrix * vec4( modifiedPosition, 1. );
 
 	vColor = texture2D( diffuse, uv );
 	vLightPosition = lightPosition;

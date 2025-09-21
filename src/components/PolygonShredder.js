@@ -251,52 +251,37 @@ const PolygonShredder = () => {
       diffuseData[j + 0] = c.r * 255;
       diffuseData[j + 1] = c.g * 255;
       diffuseData[j + 2] = c.b * 255;
+      diffuseData[j + 3] = 255; // 设置alpha为完全不透明
     }
     const diffuseTexture = new THREE.DataTexture(diffuseData, sim.width, sim.height, THREE.RGBAFormat);
     diffuseTexture.minFilter = THREE.NearestFilter;
     diffuseTexture.magFilter = THREE.NearestFilter;
     diffuseTexture.needsUpdate = true;
 
-    // 修复后的粒子材质定义，包含所有必需的uniform
+    // 简化的粒子材质，移除不必要的阴影相关uniform
     const material = new THREE.RawShaderMaterial({
       uniforms: {
         map: { value: sim.currentTexture },
-        prevMap: { value: sim.currentTexture }, // 临时使用相同的纹理
+        prevMap: { value: sim.currentTexture },
         width: { value: sim.width },
         height: { value: sim.height },
         timer: { value: 0 },
-        spread: { value: 4 },
         boxScale: { value: new THREE.Vector3(1, 1, 1) },
         meshScale: { value: 1 },
-        // 添加缺失的uniforms
-        boxVertices: { value: new Float32Array([
-          // 立方体的顶点数据
-          -1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1, -1,
-          -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1
-        ]) },
-        boxNormals: { value: new Float32Array([
-          0, 0, -1, 0, 0, 1, 1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0
-        ]) },
-        shadowV: { value: new THREE.Matrix4() },
-        shadowP: { value: new THREE.Matrix4() },
-        lightPosition: { value: new THREE.Vector3(10, 10, 10) },
         cameraPosition: { value: camera.position },
-        diffuse: { value: diffuseTexture },
-        // 简化其他未使用的uniform
-        depthTexture: { value: null },
-        projector: { value: null },
-        resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+        lightPosition: { value: new THREE.Vector3(10, 10, 10) },
+        diffuse: { value: diffuseTexture }
       },
       vertexShader: vsParticles,
       fragmentShader: fsParticles,
       side: THREE.DoubleSide,
-      transparent: true // 确保支持透明度
+      transparent: true
     });
 
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
 
-    // 修复animate函数，确保更新所有关键uniform
+    // 修复animate函数
     const animate = () => {
       requestAnimationFrame(animate);
       
@@ -326,7 +311,6 @@ const PolygonShredder = () => {
     
     // 清理函数
     return () => {
-      // ...清理代码...
       if (mesh) scene.remove(mesh);
       if (helper) helper.visible = false;
       if (controls) controls.dispose();
